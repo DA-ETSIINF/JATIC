@@ -1,4 +1,4 @@
-#JATIC - Just another ticket Checker
+##JATIC - Just another ticket Checker
 
 Wanna learn go and had to generate a huge ammount of tickets so 
 why not?
@@ -14,9 +14,9 @@ Will extract data from a csv, then tickets will be created.
 
 Csv data must be as follows:
 
-|--------|--------|------------|
-| name   |  dni   | numtickets |
-|--------|--------|------------|
+
+ name   |  dni   | numtickets |
+--------|--------|------------|
 
 Every ticket will be asigned a SHA1 key that will be saved in a db
 This SHA1 key will be added to ticket in a QR
