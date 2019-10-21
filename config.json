@@ -1,6 +1,6 @@
 {
   "ticket": {
-    "validDate": "31 de Diciembre de 2019",
+    "validDate": "31/12/2019",
     "pdfDesign": "ValesAyudasdeComedor.pdf",
     "pdfWidth": 297.4,
     "pdfHeight": 209.5,
@@ -8,7 +8,7 @@
     "y_coordinates": [50, 79, 115]
   },
   "csv_file": "data.csv",
-  "seed": 4444,
-  "password": "SecretCode",
+  "seed": ,
+  "password": "",
   "db_name": "db.sqlite3"
 }

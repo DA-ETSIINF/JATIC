@@ -7,14 +7,13 @@ import (
 	"encoding/csv"
 	"encoding/json"
 	"fmt"
+	"github.com/signintech/gopdf"
+	"github.com/skip2/go-qrcode"
 	"io"
 	"log"
 	"math/rand"
 	"os"
-	"github.com/signintech/gopdf"
-	"github.com/skip2/go-qrcode"
 	"strconv"
-	"sync"
 )
 
 var students []Student
@@ -53,15 +52,12 @@ func LoadConfiguration(file string) Configuration {
 
 func main() {
 
-	var wg sync.WaitGroup
-	wg.Add(len(students))
 	loadData()
-	for i :=0; i<len(students); i++ {
-		createKeys(i) // createKeys will globally modify existing data that we will pass on
-		insertData(students)
-		createPdf(students[i]) // we only use already existing data and will not need it modified anywhere else
 
-	}
+	createKeys(students) // createKeys will globally modify existing data that we will pass on
+	createPdf(students) // we only use already existing data and will not need it modified anywhere else
+	insertData(students)
+
 
 }
 
@@ -83,10 +79,11 @@ func loadData() []Student {
 			log.Println("Error loading data")
 			log.Fatal(err)
 		}
+		numTickets, _  := strconv.Atoi(record[2])
 		students = append(students, Student{
 			Name: record[0],
 			Dni: record[1],
-			NumTickets: 1,
+			NumTickets: numTickets,
 
 		})
 	}
@@ -96,20 +93,25 @@ func loadData() []Student {
 /// Based on seed from config, userDni, number of tickets and a rand Int it will generate a SHA1 hash
 // this will be used later on to create a the QR
 
-func createKeys(selectedStudent int) {
-	for i := 0; i < students[selectedStudent].NumTickets; i++ {
-		seedString := students[selectedStudent].Dni + configuration.Password + strconv.Itoa(rand.Int()) + strconv.Itoa(i)
-		h := sha1.New()
-		h.Write([]byte(seedString)) //generate hash  with the seedString
-		bs := h.Sum(nil) // return hash as byte slice
+func createKeys(students []Student) {
+	for _, student := range students {
+		for i := 0; i < student.NumTickets; i++ {
+			seedString := student.Dni + configuration.Password + strconv.Itoa(rand.Int()) + strconv.Itoa(i)
+			h := sha1.New()
+			h.Write([]byte(seedString)) //generate hash  with the seedString
+			bs := h.Sum(nil) // return hash as byte slice
+			log.Print("Inserting key ticket num")
+			log.Print(i)
+			log.Print( base64.StdEncoding.EncodeToString(bs))
+			// add it as a key for generating a ticket
+			student.Keys = append(student.Keys, base64.StdEncoding.EncodeToString(bs))
 
-		// add it as a key for generating a ticket
-		students[selectedStudent].Keys = append(students[selectedStudent].Keys, base64.StdEncoding.EncodeToString(bs))
 
 
 
-
+		}
 	}
+
 
 }
 
@@ -123,80 +125,78 @@ func createKeys(selectedStudent int) {
 // four pdf will be mounted
 // name of pdf will be related to its unique id
 
-func createPdf(student Student)  {
+func createPdf(students []Student)  {
+	pdf :=  gopdf.GoPdf{}
+	pdf.Start(gopdf.Config{ PageSize: gopdf.Rect{
+		//Ticket size in points
+		W: configuration.Ticket.PdfWidth,
+		H: configuration.Ticket.PdfHeight,
+	} })
+	for _, student := range students {
+		for ticknum := 0; ticknum < len(student.Keys); ticknum++  {
 
-	for ticknum := 0; ticknum < len(student.Keys); ticknum++  {
-		pdf :=  gopdf.GoPdf{}
-		pdf.Start(gopdf.Config{ PageSize: gopdf.Rect{
-			//Ticket size in points
-			W: configuration.Ticket.PdfWidth,
-			H: configuration.Ticket.PdfHeight,
-		} })
-		pdf.AddPage()
+			pdf.AddPage()
 
-		var err error
+			var err error
 
-		err = pdf.AddTTFFont("DejaVu", "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf")
-		if err != nil {
-			log.Println("Font error")
-			log.Fatalf(err.Error())
-			return
-		}
-
-
-		err = pdf.SetFont("DejaVu", "", 14)
-		if err != nil {
-			log.Print(err.Error())
-		}
-
-		template := pdf.ImportPage(configuration.Ticket.PdfDesign, 1, "/MediaBox" )
-
-		pdf.UseImportedTemplate(template, 0, 0, 0, 0)
-
-		for i := 0; i<len(configuration.Ticket.XCoordinates); i++ {
-			/// Set coordinates for menu number
-			pdf.SetX(configuration.Ticket.XCoordinates[i])
-			pdf.SetY(configuration.Ticket.YCoordinates[i])
-
-			// Find a better way to dinamically select data to write
-			if i == 0{
-				err = pdf.Cell(nil, student.Dni)
-				if err != nil {
-					log.Print(err.Error())
-				}
-			}else if i==1 {
-				err = pdf.Cell(nil, strconv.Itoa(ticknum))
-				if err != nil {
-					log.Println("PDF num write error")
-					log.Print(err.Error())
-				}
-			}else  {
-				// last thing to add is a qr with SHA1 key
-
-				err := qrcode.WriteFile(student.Keys[ticknum], qrcode.Highest, 180, "qr.png")
-				err = pdf.Image("qr.png", configuration.Ticket.XCoordinates[i],
-					configuration.Ticket.YCoordinates[i], nil)
-				if err != nil {
-					log.Println("Error creating qr")
-					log.Print(err.Error())
-				}
-			}
-		}
-
-
-
-			fileName := fmt.Sprintf("%s_%d.pdf", student.Dni, ticknum)
-
-			err = pdf.WritePdf(fileName)
+			err = pdf.AddTTFFont("DejaVu", "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf")
 			if err != nil {
-				log.Println("Error saving PDF")
-				fmt.Print(err.Error())
-			}
-			err = pdf.Close()
-			if err != nil {
-				log.Println("Error saving PDF")
-				fmt.Print(err.Error())
+				log.Println("Font error")
+				log.Fatalf(err.Error())
+				return
 			}
 
+
+			err = pdf.SetFont("DejaVu", "", 14)
+			if err != nil {
+				log.Print(err.Error())
+			}
+
+			template := pdf.ImportPage(configuration.Ticket.PdfDesign, 1, "/MediaBox" )
+
+			pdf.UseImportedTemplate(template, 0, 0, 0, 0)
+
+			for i := 0; i<len(configuration.Ticket.XCoordinates); i++ {
+				/// Set coordinates for menu number
+				pdf.SetX(configuration.Ticket.XCoordinates[i])
+				pdf.SetY(configuration.Ticket.YCoordinates[i])
+
+				// Find a better way to dinamically select data to write
+				if i == 0{
+					err = pdf.Cell(nil, student.Dni+strconv.Itoa(ticknum) )
+					if err != nil {
+						log.Print(err.Error())
+					}
+				}else if i==1 {
+					err = pdf.Cell(nil, configuration.Ticket.ValidDate)
+					if err != nil {
+						log.Println("PDF num write error")
+						log.Print(err.Error())
+					}
+				}else  {
+					// last thing to add is a qr with SHA1 key
+
+					err := qrcode.WriteFile(student.Keys[ticknum], qrcode.Highest, 180, "qr.png")
+					err = pdf.Image("qr.png", configuration.Ticket.XCoordinates[i],
+						configuration.Ticket.YCoordinates[i], nil)
+					if err != nil {
+						log.Println("Error creating qr")
+						log.Print(err.Error())
+					}
+				}
+			}
+		}
+	}
+	//fileName := fmt.Sprintf("tickets/%s_%d.pdf", student.Dni, ticknum)
+
+	err = pdf.WritePdf("tickets.pdf")
+	if err != nil {
+		log.Println("Error saving PDF")
+		fmt.Print(err.Error())
+	}
+	err = pdf.Close()
+	if err != nil {
+		log.Println("Error saving PDF")
+		fmt.Print(err.Error())
 	}
 }

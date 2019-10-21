@@ -59,23 +59,23 @@ func insertData( students []Student)  {
 	log.Print("Inserting People data to db")
 	db, err := sql.Open("sqlite3", "db.sqlite3")
 	checkErr(err)
-	for i := 0; i < len(students); i++ {
+	for _, student := range students {
 		st, err := db.Prepare("SELECT dni, name FROM people WHERE dni=$1 ")
 		checkErr(err)
-		rows, err := st.Query(students[i].Dni)
+		rows, err := st.Query(student.Dni)
 		checkErr(err)
 		if !rows.Next() {
 			st, err = db.Prepare("INSERT INTO people (dni, name) VALUES (?, ?)" )
 			checkErr(err)
-			_ , err = st.Exec(students[i].Dni, students[i].Name)
+			_ , err = st.Exec(student.Dni, student.Name)
 			checkErr(err)
 
 		}
 		_ = rows.Close()
-		for j := 0; j < len(students[i].Keys); j++ {
+		for j := 0; j < len(student.Keys); j++ {
 			st, err = db.Prepare("INSERT INTO ticket (dni, hash) VALUES (?, ?)" )
 			checkErr(err)
-			_ , err = st.Exec(students[i].Dni, students[i].Keys[j])
+			_ , err = st.Exec(student.Dni, student.Keys[j])
 			checkErr(err)
 		}
 	}
